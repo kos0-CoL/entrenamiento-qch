@@ -1,0 +1,9 @@
+venv/
+dataset_heladera/
+modelos_guardados/
+outputs/
+__pycache__/
+*.pyc
+*.pth
+*.egg-info/
+.DS_Store
