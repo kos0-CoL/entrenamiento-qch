@@ -746,7 +746,7 @@ CUSTOM_CSS = """
 .status-ok  { color: #3a8a3a; font-weight: 600; }
 """
 
-with gr.Blocks(theme=gr.themes.Base(), css=CUSTOM_CSS, title="MobileNet Kitchen") as demo:
+with gr.Blocks(title="MobileNet Kitchen") as demo:
 
     # ── Encabezado ──────────────────────────────────────
     with gr.Row(elem_id="main-title"):
@@ -1040,4 +1040,6 @@ if __name__ == "__main__":
         server_port=args.port,
         share=args.share,
         show_error=True,
+        theme=gr.themes.Base(),
+        css=CUSTOM_CSS,
     )
