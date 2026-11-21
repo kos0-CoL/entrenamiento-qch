@@ -16,6 +16,7 @@ Uso en VPS (acceso público):
 
 import os
 import sys
+import io
 import time
 import json
 import shutil
@@ -31,6 +32,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import gradio as gr
+from rembg import remove as rembg_remove
 from ddgs import DDGS
 
 # ─────────────────────────────────────────────
@@ -672,6 +674,67 @@ def detectar_en_heladera(imagen_path, filas, columnas, umbral_confianza, overlap
 
 
 # ─────────────────────────────────────────────
+#  TAB — REMOVER FONDOS
+# ─────────────────────────────────────────────
+
+def remover_fondos(clase_seleccionada, progress=gr.Progress()):
+    if not clase_seleccionada:
+        return "⚠️ Seleccioná una clase primero."
+
+    carpeta = os.path.join(DATASET_ROOT, clase_seleccionada)
+    if not os.path.exists(carpeta):
+        return f"⚠️ No existe la carpeta: {carpeta}"
+
+    archivos = [
+        f for f in os.listdir(carpeta)
+        if f.lower().endswith((".jpg", ".jpeg", ".png"))
+    ]
+
+    if not archivos:
+        return f"⚠️ No hay imágenes en '{clase_seleccionada}'."
+
+    procesadas = 0
+    errores    = 0
+
+    for i, fname in enumerate(archivos):
+        progress((i + 1) / len(archivos), desc=f"🖼️ Procesando {i+1}/{len(archivos)}: {fname}")
+        fpath = os.path.join(carpeta, fname)
+        try:
+            with open(fpath, "rb") as f:
+                img_bytes = f.read()
+
+            # Remover fondo — devuelve PNG con canal alpha
+            result_bytes = rembg_remove(img_bytes)
+
+            # Convertir a RGB con fondo blanco y guardar en el mismo path
+            img_rgba = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
+            fondo    = Image.new("RGBA", img_rgba.size, (255, 255, 255, 255))
+            fondo.paste(img_rgba, mask=img_rgba.split()[3])
+            img_final = fondo.convert("RGB")
+
+            # Guardar con el mismo nombre (sobreescribir)
+            img_final.save(fpath, "JPEG", quality=90)
+            procesadas += 1
+
+        except Exception as e:
+            errores += 1
+            continue
+
+    return (
+        f"✅ Fondos removidos en '{clase_seleccionada}'\n\n"
+        f"Procesadas: {procesadas}\n"
+        f"Errores:    {errores}\n"
+        f"Total:      {len(archivos)}\n\n"
+        f"📁 {carpeta}"
+    )
+
+
+def obtener_clases_para_dropdown():
+    clases = list(listar_clases_en_dataset().keys())
+    return gr.Dropdown(choices=clases, value=clases[0] if clases else None)
+
+
+# ─────────────────────────────────────────────
 #  INTERFAZ GRADIO
 # ─────────────────────────────────────────────
 
@@ -860,7 +923,45 @@ with gr.Blocks(theme=gr.themes.Base(), css=CUSTOM_CSS, title="MobileNet Kitchen"
             )
 
         # ══════════════════════════════════════════════════
-        #  TAB 6 — AYUDA / DOCS
+        #  TAB 6 — REMOVER FONDOS
+        # ══════════════════════════════════════════════════
+        with gr.TabItem("✂️  Remover Fondos"):
+            gr.Markdown(
+                "Eliminá el fondo de todas las imágenes de una clase. "
+                "Las imágenes se sobreescriben en el mismo lugar con fondo blanco. "
+                "Hacé esto **antes de entrenar** para que el modelo aprenda el objeto y no el fondo."
+            )
+            with gr.Row():
+                with gr.Column(scale=1):
+                    rb_clase     = gr.Dropdown(
+                        choices=list(listar_clases_en_dataset().keys()),
+                        label="Clase a procesar",
+                        interactive=True
+                    )
+                    rb_refresh   = gr.Button("🔄 Actualizar lista de clases", variant="secondary")
+                    rb_btn       = gr.Button("✂️ Remover fondos", variant="primary")
+                    gr.Markdown(
+                        "⚠️ **Atención:** esta operación sobreescribe las imágenes originales. "
+                        "Si querés conservarlas, hacé una copia antes."
+                    )
+                with gr.Column(scale=1):
+                    rb_log = gr.Textbox(
+                        label="Estado", lines=10,
+                        interactive=False, elem_classes="log-box"
+                    )
+
+            rb_refresh.click(
+                fn=obtener_clases_para_dropdown,
+                outputs=[rb_clase]
+            )
+            rb_btn.click(
+                fn=remover_fondos,
+                inputs=[rb_clase],
+                outputs=[rb_log]
+            )
+
+        # ══════════════════════════════════════════════════
+        #  TAB 7 — AYUDA / DOCS
         # ══════════════════════════════════════════════════
         with gr.TabItem("📖  Ayuda"):
             gr.Markdown("""
